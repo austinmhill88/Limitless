@@ -776,11 +776,68 @@
       </div>
     </div>
 
-    <!-- Strategy Settings -->
+    <!-- Advanced Settings -->
     <div class="card">
       <div class="card-title">
-        <span>⚙️</span> Strategy Configuration
+        <span>⚙️</span> Trading Parameters (Live Updates)
       </div>
+      
+      <!-- Trading Windows -->
+      <h3 style="color: var(--accent-primary); font-size: 1rem; margin-top: 20px; margin-bottom: 12px;">Trading Windows (ET)</h3>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>Morning Start</label>
+          <input type="time" id="morningStart" value="09:45">
+        </div>
+        <div class="setting-item">
+          <label>Morning End</label>
+          <input type="time" id="morningEnd" value="11:15">
+        </div>
+        <div class="setting-item">
+          <label>Power Start</label>
+          <input type="time" id="powerStart" value="15:00">
+        </div>
+        <div class="setting-item">
+          <label>Power End</label>
+          <input type="time" id="powerEnd" value="15:55">
+        </div>
+        <div class="setting-item">
+          <label>Friday Flatten Time</label>
+          <input type="time" id="fridayFlattenTime" value="15:45">
+        </div>
+      </div>
+      
+      <!-- Risk Management -->
+      <h3 style="color: var(--accent-primary); font-size: 1rem; margin-top: 20px; margin-bottom: 12px;">Risk Management</h3>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>Concurrency Cap</label>
+          <input type="number" id="concurrencyCap2" min="1" max="10" value="3">
+        </div>
+        <div class="setting-item">
+          <label>Soft Cap %</label>
+          <input type="number" id="softCapPct" step="0.001" value="0.01">
+        </div>
+        <div class="setting-item">
+          <label>Hard Cap %</label>
+          <input type="number" id="hardCapPct" step="0.001" value="0.015">
+        </div>
+        <div class="setting-item">
+          <label>Symbol Cooldown (sec)</label>
+          <input type="number" id="symbolCooldown" min="0" max="3600" value="600">
+        </div>
+        <div class="setting-item">
+          <label>Global Cooldown (sec)</label>
+          <input type="number" id="globalCooldown" min="0" max="3600" value="300">
+        </div>
+        <div class="setting-item">
+          <label>Target %</label>
+          <input type="number" id="targetPct" step="0.0001" value="0.005">
+        </div>
+      </div>
+      
+      <!-- Strategy Parameters -->
+      <h3 style="color: var(--accent-primary); font-size: 1rem; margin-top: 20px; margin-bottom: 12px;">Strategy Parameters</h3>
       <div class="settings-grid">
         <div class="setting-item">
           <label>
@@ -839,10 +896,13 @@
           <input type="number" id="maeK" step="0.1" value="1.2">
         </div>
       </div>
+      
       <div style="margin-top: 20px;">
-        <button class="btn-success" id="applyStrategy">💾 Apply Settings</button>
-        <small style="color: var(--text-secondary); margin-left: 16px;">
-          Settings are saved locally. Server uses .env on restart.
+        <button class="btn-success" id="applySettings">💾 Apply Settings</button>
+        <button class="btn-primary" id="refreshSettings" style="margin-left: 12px;">🔄 Refresh from Server</button>
+        <br>
+        <small style="color: var(--text-secondary); margin-top: 8px; display: block;">
+          ⚠️ Settings are applied immediately but won't persist after server restart. Update your .env file to make changes permanent.
         </small>
       </div>
     </div>
@@ -874,40 +934,111 @@
       addLogEntry('Token saved successfully');
     };
 
-    // Strategy settings
-    function loadStrategySettings() {
-      $('confirmVwap').checked = JSON.parse(localStorage.getItem('CONFIRM_VWAP_RECLAIM') ?? 'true');
-      $('confirmHL').checked = JSON.parse(localStorage.getItem('CONFIRM_HIGHER_LOW') ?? 'true');
-      $('tfMin').value = localStorage.getItem('CONFIRM_TIMEFRAME_MIN') ?? '5';
-      $('atrLen').value = localStorage.getItem('ATR_LEN') ?? '14';
-      $('atrTpK').value = localStorage.getItem('ATR_TP_K') ?? '0.5';
-      $('atrTrailK').value = localStorage.getItem('ATR_TRAIL_K') ?? '1.0';
-      $('exitPowerOnly').checked = JSON.parse(localStorage.getItem('EXIT_IN_POWER_WINDOW_ONLY') ?? 'true');
-      $('rvolMin').value = localStorage.getItem('RVOL_MIN') ?? '1.1';
-      $('spreadMax').value = localStorage.getItem('SPREAD_MAX_PCT') ?? '0.0015';
-      $('slipMax').value = localStorage.getItem('SLIPPAGE_MAX_PCT') ?? '0.003';
-      $('requireRetest').checked = JSON.parse(localStorage.getItem('REQUIRE_VWAP_RETEST') ?? 'true');
-      $('retestLookback').value = localStorage.getItem('VWAP_RETEST_LOOKBACK') ?? '5';
-      $('maeK').value = localStorage.getItem('MAE_K_ATR') ?? '1.2';
+    // Settings management
+    async function loadSettings() {
+      try {
+        const settings = await fetchJSON('/settings');
+        
+        // Trading windows
+        $('morningStart').value = settings.morning_start || '09:45';
+        $('morningEnd').value = settings.morning_end || '11:15';
+        $('powerStart').value = settings.power_start || '15:00';
+        $('powerEnd').value = settings.power_end || '15:55';
+        $('fridayFlattenTime').value = settings.friday_flatten_time || '15:45';
+        
+        // Risk management
+        $('concurrencyCap2').value = settings.concurrency_cap || 3;
+        $('softCapPct').value = settings.soft_cap_pct || 0.01;
+        $('hardCapPct').value = settings.hard_cap_pct || 0.015;
+        $('symbolCooldown').value = settings.per_symbol_cooldown_sec || 600;
+        $('globalCooldown').value = settings.global_cooldown_sec || 300;
+        $('targetPct').value = settings.target_pct || 0.005;
+        
+        // Strategy parameters
+        $('confirmVwap').checked = settings.confirm_vwap_reclaim ?? true;
+        $('confirmHL').checked = settings.confirm_higher_low ?? true;
+        $('exitPowerOnly').checked = settings.exit_in_power_window_only ?? true;
+        $('requireRetest').checked = settings.require_vwap_retest ?? true;
+        $('tfMin').value = settings.confirm_timeframe_minutes || 5;
+        $('atrLen').value = settings.atr_len || 14;
+        $('atrTpK').value = settings.atr_take_profit_k || 0.5;
+        $('atrTrailK').value = settings.atr_trail_k || 1.0;
+        $('rvolMin').value = settings.rvol_min || 1.1;
+        $('spreadMax').value = settings.spread_max_pct || 0.0015;
+        $('slipMax').value = settings.slippage_max_pct || 0.003;
+        $('retestLookback').value = settings.vwap_retest_lookback || 5;
+        $('maeK').value = settings.mae_k_atr || 1.2;
+        
+        addLogEntry('✅ Settings loaded from server');
+      } catch (e) {
+        addLogEntry('❌ Failed to load settings: ' + e.message);
+      }
     }
-    loadStrategySettings();
 
-    $('applyStrategy').onclick = () => {
-      localStorage.setItem('CONFIRM_VWAP_RECLAIM', String($('confirmVwap').checked));
-      localStorage.setItem('CONFIRM_HIGHER_LOW', String($('confirmHL').checked));
-      localStorage.setItem('CONFIRM_TIMEFRAME_MIN', String(parseInt($('tfMin').value || '5', 10)));
-      localStorage.setItem('ATR_LEN', String(parseInt($('atrLen').value || '14', 10)));
-      localStorage.setItem('ATR_TP_K', String(parseFloat($('atrTpK').value || '0.5')));
-      localStorage.setItem('ATR_TRAIL_K', String(parseFloat($('atrTrailK').value || '1.0')));
-      localStorage.setItem('EXIT_IN_POWER_WINDOW_ONLY', String($('exitPowerOnly').checked));
-      localStorage.setItem('RVOL_MIN', String(parseFloat($('rvolMin').value || '1.1')));
-      localStorage.setItem('SPREAD_MAX_PCT', String(parseFloat($('spreadMax').value || '0.0015')));
-      localStorage.setItem('SLIPPAGE_MAX_PCT', String(parseFloat($('slipMax').value || '0.003')));
-      localStorage.setItem('REQUIRE_VWAP_RETEST', String($('requireRetest').checked));
-      localStorage.setItem('VWAP_RETEST_LOOKBACK', String(parseInt($('retestLookback').value || '5', 10)));
-      localStorage.setItem('MAE_K_ATR', String(parseFloat($('maeK').value || '1.2')));
-      addLogEntry('✅ Strategy settings saved locally');
-    };
+    async function saveSettings() {
+      const token = getToken();
+      const url = token ? `/settings?token=${encodeURIComponent(token)}` : '/settings';
+      
+      const data = {
+        // Trading windows
+        morning_start: $('morningStart').value,
+        morning_end: $('morningEnd').value,
+        power_start: $('powerStart').value,
+        power_end: $('powerEnd').value,
+        friday_flatten_time: $('fridayFlattenTime').value,
+        
+        // Risk management
+        concurrency_cap: parseInt($('concurrencyCap2').value),
+        soft_cap_pct: parseFloat($('softCapPct').value),
+        hard_cap_pct: parseFloat($('hardCapPct').value),
+        per_symbol_cooldown_sec: parseInt($('symbolCooldown').value),
+        global_cooldown_sec: parseInt($('globalCooldown').value),
+        target_pct: parseFloat($('targetPct').value),
+        
+        // Strategy parameters
+        confirm_vwap_reclaim: $('confirmVwap').checked,
+        confirm_higher_low: $('confirmHL').checked,
+        exit_in_power_window_only: $('exitPowerOnly').checked,
+        require_vwap_retest: $('requireRetest').checked,
+        confirm_timeframe_minutes: parseInt($('tfMin').value),
+        atr_len: parseInt($('atrLen').value),
+        atr_take_profit_k: parseFloat($('atrTpK').value),
+        atr_trail_k: parseFloat($('atrTrailK').value),
+        rvol_min: parseFloat($('rvolMin').value),
+        spread_max_pct: parseFloat($('spreadMax').value),
+        slippage_max_pct: parseFloat($('slipMax').value),
+        vwap_retest_lookback: parseInt($('retestLookback').value),
+        mae_k_atr: parseFloat($('maeK').value),
+      };
+      
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        if (!r.ok) {
+          const errorText = await r.text();
+          throw new Error(errorText || `HTTP ${r.status}`);
+        }
+        
+        const result = await r.json();
+        
+        addLogEntry('✅ Settings updated successfully');
+        if (result.updated && Array.isArray(result.updated) && result.updated.length > 0) {
+          addLogEntry(`📝 Updated: ${result.updated.join(', ')}`);
+        }
+        if (result.errors && Array.isArray(result.errors) && result.errors.length > 0) {
+          addLogEntry(`⚠️ Errors: ${result.errors.join(', ')}`);
+        }
+      } catch (e) {
+        addLogEntry('❌ Failed to save settings: ' + e.message);
+      }
+    }
+
+    $('applySettings').onclick = saveSettings;
+    $('refreshSettings').onclick = loadSettings;
 
     // Event log
     function addLogEntry(message) {
@@ -1050,6 +1181,16 @@
           badge.textContent = 'Disconnected';
           badge.className = 'badge badge-danger';
         }
+        
+        // Update subscribed symbols list
+        if (status.subscribed && Array.isArray(status.subscribed)) {
+          for (const symbol of status.subscribed) {
+            if (!priceData.has(symbol)) {
+              priceData.set(symbol, { last: null });
+            }
+          }
+          updatePriceTicker();
+        }
       } catch (e) {
         $('wsStatusBadge').textContent = 'Unknown';
         $('wsStatusBadge').className = 'badge badge-gray';
@@ -1084,8 +1225,19 @@
       if (!symbol) return;
       
       try {
-        await fetch(`/prices/subscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        const response = await fetch(`/prices/subscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        const data = await response.json();
+        
+        // Add symbol to local priceData if not already there
+        if (!priceData.has(symbol)) {
+          priceData.set(symbol, { last: null });
+        }
+        
+        // Update ticker to show the new subscription
+        updatePriceTicker();
+        
         addLogEntry(`📊 Subscribed to ${symbol}`);
+        $('symbolInput').value = ''; // Clear input field
       } catch (e) {
         addLogEntry(`❌ Failed to subscribe to ${symbol}: ${e.message}`);
       }
@@ -1100,6 +1252,7 @@
         priceData.delete(symbol);
         updatePriceTicker();
         addLogEntry(`📊 Unsubscribed from ${symbol}`);
+        $('symbolInput').value = ''; // Clear input field
       } catch (e) {
         addLogEntry(`❌ Failed to unsubscribe from ${symbol}: ${e.message}`);
       }
@@ -1113,6 +1266,13 @@
         addLogEntry('❌ Reconnect failed: ' + e.message);
       }
     };
+    
+    // Allow subscribing with Enter key
+    $('symbolInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        $('subscribeBtn').click();
+      }
+    });
 
     // WebSocket connections
     let wsEvents = null;
@@ -1223,6 +1383,7 @@
     refreshStatus();
     refreshPositions();
     updateWsStatus();
+    loadSettings();
     connectEventsWS();
     connectPricesWS();
     connectHeartbeatWS();
