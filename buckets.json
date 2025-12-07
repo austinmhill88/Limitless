@@ -1,0 +1,12 @@
+[
+  {
+    "name": "A",
+    "settled_cash": 2000.0,
+    "unsettled": []
+  },
+  {
+    "name": "B",
+    "settled_cash": 2000.0,
+    "unsettled": []
+  }
+]
