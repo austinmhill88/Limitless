@@ -335,6 +335,138 @@ async def prices_stream(ws: WebSocket):
         with suppress(Exception):
             await ws.close()
 
+@app.get("/settings")
+async def get_settings():
+    """Get current trading parameters from settings object."""
+    return {
+        # Trading windows
+        "morning_start": settings.morning_start,
+        "morning_end": settings.morning_end,
+        "power_start": settings.power_start,
+        "power_end": settings.power_end,
+        "friday_flatten_time": settings.friday_flatten_time,
+        
+        # Risk management
+        "concurrency_cap": settings.concurrency_cap,
+        "soft_cap_pct": settings.soft_cap_pct,
+        "hard_cap_pct": settings.hard_cap_pct,
+        "per_symbol_cooldown_sec": settings.per_symbol_cooldown_sec,
+        "global_cooldown_sec": settings.global_cooldown_sec,
+        
+        # Strategy parameters
+        "confirm_vwap_reclaim": settings.confirm_vwap_reclaim,
+        "confirm_higher_low": settings.confirm_higher_low,
+        "confirm_timeframe_minutes": settings.confirm_timeframe_minutes,
+        "atr_len": settings.atr_len,
+        "atr_take_profit_k": settings.atr_take_profit_k,
+        "atr_trail_k": settings.atr_trail_k,
+        "exit_in_power_window_only": settings.exit_in_power_window_only,
+        "rvol_min": settings.rvol_min,
+        "spread_max_pct": settings.spread_max_pct,
+        "slippage_max_pct": settings.slippage_max_pct,
+        "require_vwap_retest": settings.require_vwap_retest,
+        "vwap_retest_lookback": settings.vwap_retest_lookback,
+        "mae_k_atr": settings.mae_k_atr,
+        
+        # Other
+        "target_pct": settings.target_pct,
+        "watchlist": settings.watchlist,
+        "dry_run": settings.dry_run,
+    }
+
+@app.post("/settings")
+async def update_settings(
+    data: dict,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    """Update trading parameters at runtime (does not persist to .env)."""
+    _require_token(token, authorization)
+    
+    updated = []
+    
+    # Update trading windows
+    if "morning_start" in data:
+        settings.morning_start = str(data["morning_start"])
+        updated.append("morning_start")
+    if "morning_end" in data:
+        settings.morning_end = str(data["morning_end"])
+        updated.append("morning_end")
+    if "power_start" in data:
+        settings.power_start = str(data["power_start"])
+        updated.append("power_start")
+    if "power_end" in data:
+        settings.power_end = str(data["power_end"])
+        updated.append("power_end")
+    if "friday_flatten_time" in data:
+        settings.friday_flatten_time = str(data["friday_flatten_time"])
+        updated.append("friday_flatten_time")
+    
+    # Update risk management
+    if "concurrency_cap" in data:
+        settings.concurrency_cap = int(data["concurrency_cap"])
+        updated.append("concurrency_cap")
+    if "soft_cap_pct" in data:
+        settings.soft_cap_pct = float(data["soft_cap_pct"])
+        updated.append("soft_cap_pct")
+    if "hard_cap_pct" in data:
+        settings.hard_cap_pct = float(data["hard_cap_pct"])
+        updated.append("hard_cap_pct")
+    if "per_symbol_cooldown_sec" in data:
+        settings.per_symbol_cooldown_sec = int(data["per_symbol_cooldown_sec"])
+        updated.append("per_symbol_cooldown_sec")
+    if "global_cooldown_sec" in data:
+        settings.global_cooldown_sec = int(data["global_cooldown_sec"])
+        updated.append("global_cooldown_sec")
+    
+    # Update strategy parameters
+    if "confirm_vwap_reclaim" in data:
+        settings.confirm_vwap_reclaim = bool(data["confirm_vwap_reclaim"])
+        updated.append("confirm_vwap_reclaim")
+    if "confirm_higher_low" in data:
+        settings.confirm_higher_low = bool(data["confirm_higher_low"])
+        updated.append("confirm_higher_low")
+    if "confirm_timeframe_minutes" in data:
+        settings.confirm_timeframe_minutes = int(data["confirm_timeframe_minutes"])
+        updated.append("confirm_timeframe_minutes")
+    if "atr_len" in data:
+        settings.atr_len = int(data["atr_len"])
+        updated.append("atr_len")
+    if "atr_take_profit_k" in data:
+        settings.atr_take_profit_k = float(data["atr_take_profit_k"])
+        updated.append("atr_take_profit_k")
+    if "atr_trail_k" in data:
+        settings.atr_trail_k = float(data["atr_trail_k"])
+        updated.append("atr_trail_k")
+    if "exit_in_power_window_only" in data:
+        settings.exit_in_power_window_only = bool(data["exit_in_power_window_only"])
+        updated.append("exit_in_power_window_only")
+    if "rvol_min" in data:
+        settings.rvol_min = float(data["rvol_min"])
+        updated.append("rvol_min")
+    if "spread_max_pct" in data:
+        settings.spread_max_pct = float(data["spread_max_pct"])
+        updated.append("spread_max_pct")
+    if "slippage_max_pct" in data:
+        settings.slippage_max_pct = float(data["slippage_max_pct"])
+        updated.append("slippage_max_pct")
+    if "require_vwap_retest" in data:
+        settings.require_vwap_retest = bool(data["require_vwap_retest"])
+        updated.append("require_vwap_retest")
+    if "vwap_retest_lookback" in data:
+        settings.vwap_retest_lookback = int(data["vwap_retest_lookback"])
+        updated.append("vwap_retest_lookback")
+    if "mae_k_atr" in data:
+        settings.mae_k_atr = float(data["mae_k_atr"])
+        updated.append("mae_k_atr")
+    if "target_pct" in data:
+        settings.target_pct = float(data["target_pct"])
+        updated.append("target_pct")
+    
+    asyncio.create_task(publish_event(f"Settings updated: {', '.join(updated)}"))
+    
+    return {"ok": True, "updated": updated, "message": "Settings updated successfully (changes will be lost on restart unless updated in .env)"}
+
 @app.on_event("startup")
 async def on_startup():
     global _prices_task
