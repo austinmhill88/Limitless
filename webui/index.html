@@ -1192,6 +1192,8 @@
           updatePriceTicker();
         }
       } catch (e) {
+        console.error('Failed to update WS status:', e);
+        addLogEntry(`⚠️ Failed to fetch subscription status: ${e.message}`);
         $('wsStatusBadge').textContent = 'Unknown';
         $('wsStatusBadge').className = 'badge badge-gray';
       }
@@ -1226,6 +1228,10 @@
       
       try {
         const response = await fetch(`/prices/subscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         
         // Add symbol to local priceData if not already there
@@ -1239,6 +1245,7 @@
         addLogEntry(`📊 Subscribed to ${symbol}`);
         $('symbolInput').value = ''; // Clear input field
       } catch (e) {
+        console.error('Subscribe error:', e);
         addLogEntry(`❌ Failed to subscribe to ${symbol}: ${e.message}`);
       }
     };
@@ -1248,12 +1255,17 @@
       if (!symbol) return;
       
       try {
-        await fetch(`/prices/unsubscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        const response = await fetch(`/prices/unsubscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        }
         priceData.delete(symbol);
         updatePriceTicker();
         addLogEntry(`📊 Unsubscribed from ${symbol}`);
         $('symbolInput').value = ''; // Clear input field
       } catch (e) {
+        console.error('Unsubscribe error:', e);
         addLogEntry(`❌ Failed to unsubscribe from ${symbol}: ${e.message}`);
       }
     };
