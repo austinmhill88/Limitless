@@ -223,6 +223,7 @@ async def control(action: str = Query(...), token: Optional[str] = Query(None), 
         if engine_task and not engine_task.done():
             return {"ok": True, "msg": "already running"}
         loop = asyncio.get_event_loop()
+        engine.set_event_loop(loop)  # Pass the event loop to the engine
         engine_task = loop.create_task(asyncio.to_thread(engine.loop))
         return {"ok": True, "msg": "started"}
     elif action == "stop_bot":
@@ -295,6 +296,8 @@ async def prices_sub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
+    if not sym.isalnum():
+        raise HTTPException(status_code=400, detail="invalid symbol format")
     _prices_symbols.add(sym)
     await _prices_send({"action": "subscribe", "bars": [sym], "quotes": [sym], "trades": [sym]})
     return {"ok": True, "subscribed": sorted(list(_prices_symbols))}
@@ -304,6 +307,8 @@ async def prices_unsub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
+    if not sym.isalnum():
+        raise HTTPException(status_code=400, detail="invalid symbol format")
     with suppress(KeyError):
         _prices_symbols.remove(sym)
     await _prices_send({"action": "subscribe", "bars": list(_prices_symbols), "quotes": list(_prices_symbols), "trades": list(_prices_symbols)})

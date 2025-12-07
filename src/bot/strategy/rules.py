@@ -14,7 +14,9 @@ def ema(series: pd.Series, span: int) -> pd.Series:
 def compute_vwap(df: pd.DataFrame) -> pd.Series:
     tp = (df["high"] + df["low"] + df["close"]) / 3.0
     cum_vp = (tp * df["volume"]).cumsum()
-    cum_vol = df["volume"].cumsum().replace(0, math.nan)
+    cum_vol = df["volume"].cumsum()
+    # Avoid division by zero by replacing 0 with NaN
+    cum_vol = cum_vol.replace(0, math.nan)
     return cum_vp / cum_vol
 
 def opening_range(df: pd.DataFrame, start_et: datetime) -> Tuple[float, float]:
@@ -39,11 +41,15 @@ def qualify_entry(df: pd.DataFrame, orh: float) -> Dict[str, Any]:
     above_orh = last["close"] > orh
     # VWAP touch or near-touch within tolerance
     vwap_touch = (prev3["low"] <= prev3["vwap"]).any()
-    near_touch = (abs(prev3["low"] - prev3["vwap"]) / prev3["vwap"]).abs().min() <= settings.vwap_touch_tolerance_pct
+    # Avoid division by zero when calculating near touch tolerance
+    vwap_values = prev3["vwap"].replace(0, math.nan)
+    near_touch = (abs(prev3["low"] - vwap_values) / vwap_values).abs().min() <= settings.vwap_touch_tolerance_pct
     touched = bool(vwap_touch or near_touch)
     # Close back above vwap on current bar
     close_back_above = last["close"] > last["vwap"]
-    extension = (last["close"] - last["vwap"]) / last["vwap"]
+    # Avoid division by zero when calculating extension
+    vwap_val = last["vwap"] if last["vwap"] != 0 else 1.0
+    extension = (last["close"] - last["vwap"]) / vwap_val
     not_extended = extension <= settings.vwap_extension_max_pct
 
     return {

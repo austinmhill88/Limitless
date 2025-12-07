@@ -2,9 +2,11 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, Set
+import logging
 
 from bot.config.settings import settings
 
+logger = logging.getLogger("limitless.earnings")
 TZ_ET = ZoneInfo("America/New_York")
 
 class EarningsCalendar:
@@ -14,13 +16,24 @@ class EarningsCalendar:
     def refresh_symbol(self, symbol: str):
         # Finnhub endpoint: /calendar/earnings?symbol=TSLA
         # Note: You may need to handle rate limits; cache results daily
+        if not settings.finnhub_api_key:
+            logger.warning("Finnhub API key not configured, skipping earnings calendar refresh for %s", symbol)
+            return
+        
         url = "https://finnhub.io/api/v1/calendar/earnings"
         params = {"symbol": symbol, "token": settings.finnhub_api_key}
         try:
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             data = r.json()
-        except Exception:
+        except requests.exceptions.Timeout:
+            logger.error("Timeout fetching earnings calendar for %s", symbol)
+            return
+        except requests.exceptions.RequestException as e:
+            logger.error("Error fetching earnings calendar for %s: %s", symbol, e)
+            return
+        except ValueError as e:
+            logger.error("Invalid JSON response for earnings calendar for %s: %s", symbol, e)
             return
 
         days = set()

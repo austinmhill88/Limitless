@@ -128,8 +128,21 @@ class Engine:
         self.daily_start_equity: float = 0.0
         self.per_symbol_last_exit: Dict[str, datetime] = {}
         self.global_last_entry: Optional[datetime] = None
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
         for sym in settings.watchlist:
             earnings.refresh_symbol(sym)
+    
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
+        """Set the event loop to use for publishing events from the thread."""
+        self._event_loop = loop
+    
+    def _publish(self, message: str):
+        """Safely publish a message to the event queue from the engine thread."""
+        if self._event_loop and self._event_loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(publish(message), self._event_loop)
+            except Exception:
+                pass  # Silently fail if event loop is not available
 
     def refresh_mode(self):
         acct = get_account()
@@ -213,12 +226,12 @@ class Engine:
         rvol = _estimate_rvol(df)
         if rvol < settings.rvol_min:
             self.aud.log("entry_skipped_rvol", {"rvol": rvol, "min": settings.rvol_min})
-            asyncio.create_task(publish(format_skip(symbol, "insufficient relative volume", {"rvol": rvol, "min": settings.rvol_min})))
+            self._publish(format_skip(symbol, "insufficient relative volume", {"rvol": rvol, "min": settings.rvol_min}))
             return False
         spread_pct = _estimate_spread_pct(df)
         if spread_pct > settings.spread_max_pct:
             self.aud.log("entry_skipped_spread", {"spread_pct": spread_pct, "max": settings.spread_max_pct})
-            asyncio.create_task(publish(format_skip(symbol, "spread too wide", {"spread_pct": spread_pct, "max": settings.spread_max_pct})))
+            self._publish(format_skip(symbol, "spread too wide", {"spread_pct": spread_pct, "max": settings.spread_max_pct}))
             return False
         return True
 
@@ -226,7 +239,7 @@ class Engine:
         self.refresh_mode()
         for symbol in settings.symbol_priority:
             if self.earnings_skip(symbol):
-                asyncio.create_task(publish(format_skip(symbol, "earnings lockout")))
+                self._publish(format_skip(symbol, "earnings lockout"))
                 continue
             if not self.can_open_new_position(symbol):
                 continue
@@ -245,13 +258,13 @@ class Engine:
             info = qualify_entry(df, orh)
 
             if not qualifies_all(info):
-                asyncio.create_task(publish(format_skip(symbol, "setup invalid against entry criteria")))
+                self._publish(format_skip(symbol, "setup invalid against entry criteria"))
                 continue
 
             # Confirmations
             if not self._apply_entry_confirmations(df):
                 self.aud.log("entry_rejected_confirmation", {"symbol": symbol})
-                asyncio.create_task(publish(format_skip(symbol, "confirmation not satisfied (VWAP/Higher-low/Retest)")))
+                self._publish(format_skip(symbol, "confirmation not satisfied (VWAP/Higher-low/Retest)"))
                 continue
 
             # Guardrails
@@ -266,7 +279,7 @@ class Engine:
                 run_pct = (price - signal_high) / signal_high
                 if run_pct > settings.slippage_max_pct:
                     self.aud.log("entry_skipped_slippage", {"symbol": symbol, "run_pct": run_pct, "max": settings.slippage_max_pct})
-                    asyncio.create_task(publish(format_skip(symbol, "signal exceeded — slippage limit breached", {"run_pct": run_pct, "max": settings.slippage_max_pct})))
+                    self._publish(format_skip(symbol, "signal exceeded — slippage limit breached", {"run_pct": run_pct, "max": settings.slippage_max_pct}))
                     continue
 
             atr = _calc_atr(df, settings.atr_len)
@@ -281,12 +294,12 @@ class Engine:
             if self.mode == "cash":
                 qty, bucket = self.compute_size_cash_mode(entry_price)
                 if qty <= 0 or not bucket:
-                    asyncio.create_task(publish(format_skip(symbol, "insufficient settled cash")))
+                    self._publish(format_skip(symbol, "insufficient settled cash"))
                     continue
                 try:
                     self.ledger.consume_on_buy(bucket, qty * entry_price)
                 except Exception:
-                    asyncio.create_task(publish(format_skip(symbol, "ledger consume failed")))
+                    self._publish(format_skip(symbol, "ledger consume failed"))
                     continue
             else:
                 qty = self.compute_size_margin_mode(symbol, entry_price)
@@ -308,7 +321,7 @@ class Engine:
             }
             self.global_last_entry = now_et()
             self.aud.log("entry_order_placed", {"symbol": symbol, "qty": qty, "entry": entry_price, "target": target, "mode": self.mode})
-            asyncio.create_task(publish(format_entry(symbol, qty, entry_price, target, self.mode)))
+            self._publish(format_entry(symbol, qty, entry_price, target, self.mode))
             break
 
     def cancel_stale_entries(self):
@@ -332,7 +345,7 @@ class Engine:
                         self.ledger.save()
                         break
             self.aud.log("entry_order_cancelled", {"symbol": symbol, "order_id": oid})
-            asyncio.create_task(publish(format_info(symbol, "entry cancelled — time expired", {"minutes": settings.entry_cancel_minutes})))
+            self._publish(format_info(symbol, "entry cancelled — time expired", {"minutes": settings.entry_cancel_minutes}))
             del self.pending_orders[symbol]
 
     def reconcile_positions(self):
@@ -351,7 +364,7 @@ class Engine:
                 )
                 self.positions.append(ps)
                 self.aud.log("position_opened", {"symbol": symbol, "entry": ps.entry_price, "target": ps.target_price, "qty": ps.qty, "mode": self.mode})
-                asyncio.create_task(publish(format_info(symbol, "position opened", {"entry": ps.entry_price, "target": ps.target_price, "qty": ps.qty})))
+                self._publish(format_info(symbol, "position opened", {"entry": ps.entry_price, "target": ps.target_price, "qty": ps.qty}))
                 del self.pending_orders[symbol]
 
         for ps in list(self.positions):
@@ -374,7 +387,7 @@ class Engine:
                 self.per_symbol_last_exit[ps.symbol] = now_et()
                 self.positions.remove(ps)
                 self.aud.log("position_closed", {"symbol": ps.symbol, "exit_price": exit_price, "realized": realized, "reason": "friday_flatten"})
-                asyncio.create_task(publish(format_close(ps.symbol, exit_price, realized, "friday_flatten")))
+                self._publish(format_close(ps.symbol, exit_price, realized, "friday_flatten"))
                 continue
 
             if lp >= ps.target_price:
@@ -387,7 +400,7 @@ class Engine:
                 self.per_symbol_last_exit[ps.symbol] = now_et()
                 self.positions.remove(ps)
                 self.aud.log("position_closed", {"symbol": ps.symbol, "exit_price": exit_price, "realized": realized, "reason": "target_hit"})
-                asyncio.create_task(publish(format_close(ps.symbol, exit_price, realized, "target_hit")))
+                self._publish(format_close(ps.symbol, exit_price, realized, "target_hit"))
                 continue
 
             # MAE early cut: if price drops more than k*ATR below entry before target, exit early
@@ -406,7 +419,7 @@ class Engine:
                         self.per_symbol_last_exit[ps.symbol] = now_et()
                         self.positions.remove(ps)
                         self.aud.log("position_closed", {"symbol": ps.symbol, "exit_price": exit_price, "realized": realized, "reason": "mae_cut"})
-                        asyncio.create_task(publish(format_close(ps.symbol, exit_price, realized, "mae_cut")))
+                        self._publish(format_close(ps.symbol, exit_price, realized, "mae_cut"))
                         continue
 
             # ATR trailing stop (optional, mostly in power window)
@@ -429,7 +442,7 @@ class Engine:
                                 self.per_symbol_last_exit[ps.symbol] = now_et()
                                 self.positions.remove(ps)
                                 self.aud.log("position_closed", {"symbol": ps.symbol, "exit_price": exit_price, "realized": realized, "reason": "atr_trail_stop"})
-                                asyncio.create_task(publish(format_close(ps.symbol, exit_price, realized, "atr_trail_stop")))
+                                self._publish(format_close(ps.symbol, exit_price, realized, "atr_trail_stop"))
                                 continue
 
     def loop(self):
@@ -447,5 +460,5 @@ class Engine:
                 break
             except Exception as e:
                 self.aud.log("engine_error", {"msg": str(e)})
-                asyncio.create_task(publish(f"engine: error — {e}"))
+                self._publish(f"engine: error — {e}")
                 time.sleep(2)
