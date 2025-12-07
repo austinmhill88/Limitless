@@ -515,7 +515,7 @@ async def update_settings(
         
         asyncio.create_task(publish_event(f"Settings updated: {', '.join(updated)}"))
         
-        return {"ok": True, "updated": updated, "errors": errors if errors else None, "message": "Settings updated successfully (changes will be lost on restart unless updated in .env)"}
+        return {"ok": True, "updated": updated, "errors": errors, "message": "Settings updated successfully (changes will be lost on restart unless updated in .env)"}
     except Exception as e:
         logger.error("Failed to update settings: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")

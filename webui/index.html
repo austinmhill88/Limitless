@@ -1026,7 +1026,12 @@
         const result = await r.json();
         
         addLogEntry('✅ Settings updated successfully');
-        addLogEntry(`📝 Updated: ${result.updated.join(', ')}`);
+        if (result.updated && Array.isArray(result.updated) && result.updated.length > 0) {
+          addLogEntry(`📝 Updated: ${result.updated.join(', ')}`);
+        }
+        if (result.errors && Array.isArray(result.errors) && result.errors.length > 0) {
+          addLogEntry(`⚠️ Errors: ${result.errors.join(', ')}`);
+        }
       } catch (e) {
         addLogEntry('❌ Failed to save settings: ' + e.message);
       }
