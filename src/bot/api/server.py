@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import json
+import re
 from typing import Dict, Optional
 from contextlib import suppress
 
@@ -215,6 +216,7 @@ async def control(action: str = Query(...), token: Optional[str] = Query(None), 
             asyncio.create_task(publish_event("system: Bot already running"))
             return {"ok": True, "msg": "already running"}
         loop = asyncio.get_event_loop()
+        engine.set_event_loop(loop)  # Pass the event loop to the engine
         engine_task = loop.create_task(asyncio.to_thread(engine.loop))
         asyncio.create_task(publish_event("system: Bot started"))
         return {"ok": True, "msg": "started"}
@@ -291,6 +293,9 @@ async def prices_sub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
+    # Allow alphanumeric plus dots and hyphens for symbols like BRK.A
+    if not re.match(r'^[A-Z0-9.-]+$', sym):
+        raise HTTPException(status_code=400, detail="invalid symbol format")
     _prices_symbols.add(sym)
     await _prices_send({"action": "subscribe", "bars": [sym], "quotes": [sym], "trades": [sym]})
     asyncio.create_task(publish_event(f"Market data: subscribed {sym}"))
@@ -301,6 +306,9 @@ async def prices_unsub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
+    # Allow alphanumeric plus dots and hyphens for symbols like BRK.A
+    if not re.match(r'^[A-Z0-9.-]+$', sym):
+        raise HTTPException(status_code=400, detail="invalid symbol format")
     with suppress(KeyError):
         _prices_symbols.remove(sym)
     await _prices_send({"action": "subscribe", "bars": list(_prices_symbols), "quotes": list(_prices_symbols), "trades": list(_prices_symbols)})

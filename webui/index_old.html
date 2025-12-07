@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Limitless Control</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; padding: 16px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    .row { display:flex; flex-wrap:wrap; gap:12px; margin:12px 0; align-items:center; }
+    input, select { padding:10px 12px; border-radius:8px; border:1px solid #8883; min-width: 160px; }
+    button { padding:10px 14px; border-radius:8px; border:1px solid #8883; background:#2b7; color:#fff; font-weight:600; cursor:pointer; }
+    button.stop { background:#d33; }
+    .card { border:1px solid #8883; border-radius:12px; padding:16px; flex:1 1 260px; min-width:260px; }
+    .k { opacity:0.7; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid #8883; padding:8px; text-align:left; }
+    .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:0.85rem; }
+    .green { background:#1b5; color:#fff; }
+    .gray { background:#999; color:#fff; }
+    .blue { background:#36c; color:#fff; }
+    .orange { background:#e67e22; color:#fff; }
+    .yellow { background:#f1c40f; color:#000; }
+    .red { background:#e74c3c; color:#fff; }
+    #ticker { border:1px solid #8883; border-radius:8px; padding:8px; height:240px; overflow:auto; background:#0001; font-family: ui-monospace; }
+    .sectionHeader { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .sectionRight { display:flex; align-items:center; gap:8px; }
+
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+    label { display:flex; align-items:center; gap:10px; line-height: 1.15; word-break: break-word; white-space: normal; }
+    label input[type="checkbox"] { transform: translateY(1px); }
+    .small { min-width: 120px; }
+    .field { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .field input { width: 110px; }
+    .card h3 { margin-top: 0; margin-bottom: 8px; }
+    .card small.k { display:block; margin-top:8px; }
+    @media (max-width: 480px) {
+      .grid { grid-template-columns: 1fr; }
+      .field input { width: 100%; max-width: 180px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Limitless Control</h1>
+    <div class="row">
+      <input id="tokenInput" type="password" placeholder="Control token (optional)" />
+      <button id="saveTokenBtn">Save token</button>
+      <select id="modeSelect" title="Data mode">
+        <option value="paper">paper</option>
+        <option value="live">live</option>
+      </select>
+      <button id="startBtn">Start</button>
+      <button class="stop" id="stopBtn">Stop</button>
+    </div>
+  </header>
+
+  <div class="row">
+    <div class="card">
+      <div><span class="k">Trading mode:</span> <b id="mode">—</b></div>
+      <div><span class="k">Equity:</span> <b id="equity">—</b></div>
+      <div><span class="k">Buying power:</span> <b id="bp">—</b></div>
+      <div><span class="k">Window:</span>
+        <span id="windowBadge" class="badge gray">Out of window</span>
+      </div>
+      <div><span class="k">Now:</span> <span id="ts">—</span></div>
+    </div>
+
+    <div class="card">
+      <div><span class="k">Daily caps:</span></div>
+      <div>Soft hit: <b id="soft">False</b>, Hard hit: <b id="hard">False</b></div>
+      <div>Realized USD: <b id="realized">0</b></div>
+      <div>Limits: <b id="softCap">—</b> / <b id="hardCap">—</b></div>
+    </div>
+
+    <div class="card">
+      <div><span class="k">Concurrency:</span></div>
+      <div>Open positions: <b id="openPos">0</b></div>
+      <div>Cap: <b id="cap">—</b></div>
+      <div>Last entry: <span id="lastEntry">—</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Positions</h3>
+    <table>
+      <thead><tr><th>Symbol</th><th>Entry</th><th>Target</th><th>Qty</th><th>Opened</th><th>Bucket</th></tr></thead>
+      <tbody id="posBody"><tr><td colspan="6">No positions</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="row">
+    <div class="card" style="min-width:320px; flex:2">
+      <div class="sectionHeader">
+        <h3>Market data</h3>
+        <div class="sectionRight">
+          <span id="modeBadge" class="badge blue" title="Data stream mode">paper</span>
+          <span id="wsStatusBadge" class="badge gray" title="Upstream WS status">Unknown</span>
+          <button id="reconnectBtn" title="Reconnect prices WS" style="padding:6px 10px; font-size:0.9rem;">Reconnect prices</button>
+        </div>
+      </div>
+      <div class="row">
+        <input id="symbolInput" type="text" placeholder="Symbol e.g. AAPL" />
+        <button id="subBtn">Subscribe</button>
+        <button id="unsubBtn">Unsubscribe</button>
+      </div>
+      <div id="ticker"></div>
+    </div>
+
+    <div class="card" style="min-width:320px; flex:1">
+      <h3>Latest</h3>
+      <table>
+        <thead><tr><th>Symbol</th><th>Last</th><th>Bid</th><th>Ask</th><th>Time</th></tr></thead>
+        <tbody id="latestBody"><tr><td colspan="5">No data yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Strategy settings</h3>
+    <div class="grid">
+      <label><input id="confirmVwap" type="checkbox" /> Confirm VWAP reclaim</label>
+      <label><input id="confirmHL" type="checkbox" /> Confirm higher low</label>
+      <div class="field"><span>Timeframe (min)</span><input id="tfMin" class="small" type="number" min="1" max="60" /></div>
+      <div class="field"><span>ATR length</span><input id="atrLen" class="small" type="number" min="5" max="50" /></div>
+      <div class="field"><span>ATR TP k</span><input id="atrTpK" class="small" type="number" step="0.1" /></div>
+      <div class="field"><span>ATR trail k</span><input id="atrTrailK" class="small" type="number" step="0.1" /></div>
+      <label><input id="exitPowerOnly" type="checkbox" /> Exit only in power window</label>
+      <div class="field"><span>RVOL min</span><input id="rvolMin" class="small" type="number" step="0.1" /></div>
+      <div class="field"><span>Spread max %</span><input id="spreadMax" class="small" type="number" step="0.0001" /></div>
+      <div class="field"><span>Slippage max %</span><input id="slipMax" class="small" type="number" step="0.0001" /></div>
+      <label><input id="requireRetest" type="checkbox" /> Require VWAP retest</label>
+      <div class="field"><span>Retest lookback</span><input id="retestLookback" class="small" type="number" min="2" max="10" /></div>
+      <div class="field"><span>MAE k * ATR</span><input id="maeK" class="small" type="number" step="0.1" /></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="applyStrategy">Apply</button>
+    </div>
+    <small class="k">These mirror .env values; server uses .env on restart.</small>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt2 = (n) => (n==null ? '—' : (+n).toLocaleString(undefined, {maximumFractionDigits:2}));
+    const fmtTs = (s) => s ? new Date(s).toLocaleString() : '—';
+
+    function getToken() { return localStorage.getItem('limitless_token') || ''; }
+    function saveToken(t) { localStorage.setItem('limitless_token', t || ''); }
+    $('tokenInput').value = getToken();
+    $('saveTokenBtn').onclick = () => saveToken($('tokenInput').value);
+
+    function loadStrategyUI() {
+      $('confirmVwap').checked = JSON.parse(localStorage.getItem('CONFIRM_VWAP_RECLAIM') ?? 'true');
+      $('confirmHL').checked = JSON.parse(localStorage.getItem('CONFIRM_HIGHER_LOW') ?? 'true');
+      $('tfMin').value = localStorage.getItem('CONFIRM_TIMEFRAME_MIN') ?? '5';
+      $('atrLen').value = localStorage.getItem('ATR_LEN') ?? '14';
+      $('atrTpK').value = localStorage.getItem('ATR_TP_K') ?? '0.5';
+      $('atrTrailK').value = localStorage.getItem('ATR_TRAIL_K') ?? '1.0';
+      $('exitPowerOnly').checked = JSON.parse(localStorage.getItem('EXIT_IN_POWER_WINDOW_ONLY') ?? 'true');
+      $('rvolMin').value = localStorage.getItem('RVOL_MIN') ?? '1.1';
+      $('spreadMax').value = localStorage.getItem('SPREAD_MAX_PCT') ?? '0.0015';
+      $('slipMax').value = localStorage.getItem('SLIPPAGE_MAX_PCT') ?? '0.003';
+      $('requireRetest').checked = JSON.parse(localStorage.getItem('REQUIRE_VWAP_RETEST') ?? 'true');
+      $('retestLookback').value = localStorage.getItem('VWAP_RETEST_LOOKBACK') ?? '5';
+      $('maeK').value = localStorage.getItem('MAE_K_ATR') ?? '1.2';
+    }
+    loadStrategyUI();
+
+    $('applyStrategy').onclick = () => {
+      localStorage.setItem('CONFIRM_VWAP_RECLAIM', String($('confirmVwap').checked));
+      localStorage.setItem('CONFIRM_HIGHER_LOW', String($('confirmHL').checked));
+      localStorage.setItem('CONFIRM_TIMEFRAME_MIN', String(parseInt($('tfMin').value || '5', 10)));
+      localStorage.setItem('ATR_LEN', String(parseInt($('atrLen').value || '14', 10)));
+      localStorage.setItem('ATR_TP_K', String(parseFloat($('atrTpK').value || '0.5')));
+      localStorage.setItem('ATR_TRAIL_K', String(parseFloat($('atrTrailK').value || '1.0')));
+      localStorage.setItem('EXIT_IN_POWER_WINDOW_ONLY', String($('exitPowerOnly').checked));
+      localStorage.setItem('RVOL_MIN', String(parseFloat($('rvolMin').value || '1.1')));
+      localStorage.setItem('SPREAD_MAX_PCT', String(parseFloat($('spreadMax').value || '0.0015')));
+      localStorage.setItem('SLIPPAGE_MAX_PCT', String(parseFloat($('slipMax').value || '0.003')));
+      localStorage.setItem('REQUIRE_VWAP_RETEST', String($('requireRetest').checked));
+      localStorage.setItem('VWAP_RETEST_LOOKBACK', String(parseInt($('retestLookback').value || '5', 10)));
+      localStorage.setItem('MAE_K_ATR', String(parseFloat($('maeK').value || '1.2')));
+      alert('Saved locally. Server applies .env on restart.');
+    };
+
+    async function fetchJSON(path) {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function updateModeBadge(dataMode) {
+      const badge = $('modeBadge');
+      const m = (dataMode || '').toLowerCase();
+      if (m === 'live') {
+        badge.textContent = 'live';
+        badge.className = 'badge orange';
+      } else {
+        badge.textContent = 'paper';
+        badge.className = 'badge blue';
+      }
+    }
+
+    async function updateWsStatus() {
+      try {
+        const s = await fetchJSON('/prices/status');
+        const b = $('wsStatusBadge');
+        if (s.reconnecting) {
+          b.textContent = 'Reconnecting…';
+          b.className = 'badge yellow';
+        } else if (s.connected) {
+          b.textContent = 'Connected';
+          b.className = 'badge green';
+        } else {
+          b.textContent = 'Disconnected';
+          b.className = 'badge red';
+        }
+      } catch {
+        const b = $('wsStatusBadge');
+        b.textContent = 'Unknown';
+        b.className = 'badge gray';
+      }
+    }
+
+    async function refresh() {
+      try {
+        const s = await fetchJSON('/status');
+        $('mode').textContent = s.mode ?? '—';
+        updateModeBadge($('modeSelect').value);
+        $('equity').textContent = fmt2(s.equity);
+        $('bp').textContent = fmt2(s.buying_power);
+        $('ts').textContent = fmtTs(s.ts);
+        $('soft').textContent = s.daily_caps?.soft_hit ? 'True' : 'False';
+        $('hard').textContent = s.daily_caps?.hard_hit ? 'True' : 'False';
+        $('realized').textContent = fmt2(s.daily_caps?.realized_usd);
+        $('softCap').textContent = ((s.daily_caps?.soft_cap_pct ?? 0)*100).toFixed(1) + '%';
+        $('hardCap').textContent = ((s.daily_caps?.hard_cap_pct ?? 0)*100).toFixed(1) + '%';
+        $('openPos').textContent = s.concurrency?.open_positions ?? 0;
+        $('cap').textContent = s.concurrency?.cap ?? 0;
+        $('lastEntry').textContent = s.cooldowns?.global_last_entry ? fmtTs(s.cooldowns.global_last_entry) : '—';
+        const inWindow = !!s.windows?.is_in_window;
+        const windowBadge = $('windowBadge');
+        windowBadge.textContent = inWindow ? 'In window' : 'Out of window';
+        windowBadge.className = 'badge ' + (inWindow ? 'green' : 'gray');
+      } catch (e) {
+        console.error(e);
+      }
+
+      try {
+        const pos = await fetchJSON('/positions');
+        const body = $('posBody');
+        body.innerHTML = '';
+        if (!pos.length) {
+          body.innerHTML = '<tr><td colspan="6">No positions</td></tr>';
+        } else {
+          for (const p of pos) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${p.symbol}</td>
+              <td>${fmt2(p.entry_price)}</td>
+              <td>${fmt2(p.target_price)}</td>
+              <td>${p.qty ?? '—'}</td>
+              <td>${fmtTs(p.opened_at)}</td>
+              <td>${p.bucket ?? '—'}</td>
+            `;
+            body.appendChild(tr);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function appendTicker(line) {
+      const t = $('ticker');
+      const div = document.createElement('div');
+      div.textContent = line;
+      t.appendChild(div);
+      t.scrollTop = t.scrollHeight;
+    }
+    let wsEvents = null;
+    function startEventsWS() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      try {
+        if (wsEvents) { try { wsEvents.close(); } catch {} wsEvents = null; }
+        wsEvents = new WebSocket(`${proto}://${location.host}/events`);
+        wsEvents.onmessage = (ev) => {
+          const text = typeof ev.data === 'string' ? ev.data : String(ev.data);
+          appendTicker(text);
+        };
+        wsEvents.onclose = () => setTimeout(startEventsWS, 3000);
+        wsEvents.onerror = () => setTimeout(startEventsWS, 3000);
+      } catch {
+        setTimeout(startEventsWS, 3000);
+      }
+    }
+
+    let wsHeartbeat = null;
+    function startHeartbeatWS() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const token = getToken();
+      const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+      try {
+        if (wsHeartbeat) { try { wsHeartbeat.close(); } catch {} wsHeartbeat = null; }
+        wsHeartbeat = new WebSocket(`${proto}://${location.host}/stream${qs}`);
+        wsHeartbeat.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'heartbeat') {
+              $('ts').textContent = new Date(msg.ts).toLocaleString();
+              const badge = $('windowBadge');
+              badge.textContent = msg.in_window ? 'In window' : 'Out of window';
+              badge.className = 'badge ' + (msg.in_window ? 'green' : 'gray');
+            }
+          } catch {}
+        };
+        wsHeartbeat.onclose = () => setTimeout(startHeartbeatWS, 3000);
+        wsHeartbeat.onerror = () => setTimeout(startHeartbeatWS, 3000);
+      } catch {
+        setTimeout(startHeartbeatWS, 3000);
+      }
+    }
+
+    const latest = new Map();
+    function updateLatest(sym, patch) {
+      const cur = latest.get(sym) || {};
+      const next = { ...cur, ...patch };
+      latest.set(sym, next);
+      const body = $('latestBody');
+      body.innerHTML = '';
+      const rows = Array.from(latest.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="5">No data yet</td></tr>';
+        return;
+      }
+      for (const [S, v] of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${S}</td>
+          <td>${v.last != null ? fmt2(v.last) : '—'}</td>
+          <td>${v.bid != null ? fmt2(v.bid) : '—'}</td>
+          <td>${v.ask != null ? fmt2(v.ask) : '—'}</td>
+          <td>${v.ts ? fmtTs(v.ts) : '—'}</td>
+        `;
+        body.appendChild(tr);
+      }
+    }
+
+    function addStatus(line) {
+      appendTicker(line);
+      const b = $('wsStatusBadge');
+      b.textContent = 'Connected';
+      b.className = 'badge green';
+    }
+    function addSubscription(sub) {
+      const trades = (sub.trades || []).join(', ');
+      const quotes = (sub.quotes || []).join(', ');
+      const bars = (sub.bars || []).join(', ');
+      const txt = [
+        'Subscribed:',
+        trades ? `trades [${trades}]` : '',
+        quotes ? `quotes [${quotes}]` : '',
+        bars ? `bars [${bars}]` : '',
+      ].filter(Boolean).join(' · ');
+      appendTicker(txt);
+    }
+
+    let wsPrices = null;
+    function startPricesWS() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      try {
+        if (wsPrices) { try { wsPrices.close(); } catch {} wsPrices = null; }
+        wsPrices = new WebSocket(`${proto}://${location.host}/prices`);
+        wsPrices.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (Array.isArray(msg)) { for (const m of msg) handlePricesMsg(m); }
+            else { handlePricesMsg(msg); }
+          } catch {}
+        };
+        wsPrices.onclose = () => {
+          const b = $('wsStatusBadge'); b.textContent = 'Disconnected'; b.className = 'badge red';
+          setTimeout(startPricesWS, 1000);
+        };
+        wsPrices.onerror = () => {
+          const b = $('wsStatusBadge'); b.textContent = 'Disconnected'; b.className = 'badge red';
+          setTimeout(startPricesWS, 1000);
+        };
+      } catch {
+        setTimeout(startPricesWS, 1000);
+      }
+    }
+
+    function handlePricesMsg(msg) {
+      if (!msg || !msg.T) return;
+      if (msg.T === 'b') {
+        updateLatest(msg.S, { last: msg.c, ts: msg.t });
+      } else if (msg.T === 'q') {
+        updateLatest(msg.S, { bid: msg.bp, ask: msg.ap, ts: msg.t });
+      } else if (msg.T === 't') {
+        updateLatest(msg.S, { last: msg.p, ts: msg.t });
+      } else if (msg.T === 'success') {
+        if (typeof msg.msg === 'string') {
+          const wsUrl = msg.msg.includes('ws') ? msg.msg.match(/\((.*)\)/)?.[1] : null;
+          if (wsUrl) {
+            addStatus(`Prices connected (${wsUrl.includes('/iex') ? 'IEX' : 'SIP'})`);
+          } else {
+            addStatus('Prices connected');
+          }
+        } else {
+          addStatus('Prices connected');
+        }
+      } else if (msg.T === 'subscription') {
+        addSubscription(msg);
+      } else if (msg.T === 'error') {
+        appendTicker(`Prices error — ${msg.code || ''} ${msg.msg || ''}`.trim());
+        const b = $('wsStatusBadge');
+        b.textContent = 'Disconnected';
+        b.className = 'badge red';
+      }
+    }
+
+    async function postMode(mode) {
+      const token = getToken();
+      const url = token ? `/mode?mode=${encodeURIComponent(mode)}&token=${encodeURIComponent(token)}`
+                        : `/mode?mode=${encodeURIComponent(mode)}`;
+      const r = await fetch(url, { method: 'POST' });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+    $('modeSelect').onchange = async (e) => {
+      const mode = e.target.value;
+      try {
+        await postMode(mode);
+        updateModeBadge(mode);
+        await refresh();
+        updateWsStatus();
+      } catch (err) {
+        alert('Failed to set mode: ' + err);
+      }
+    };
+
+    async function postAction(action) {
+      const token = getToken();
+      const url = token ? `/control?action=${encodeURIComponent(action)}&token=${encodeURIComponent(token)}`
+                        : `/control?action=${encodeURIComponent(action)}`;
+      const r = await fetch(url, { method: 'POST' });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+    $('startBtn').onclick = async () => { try { await postAction('start_bot'); } catch(e){ alert(e); } };
+    $('stopBtn').onclick = async () => { try { await postAction('stop_bot'); } catch(e){ alert(e); } };
+
+    $('subBtn').onclick = async () => {
+      const sym = $('symbolInput').value.trim().toUpperCase();
+      if (!sym) return;
+      try { await fetch(`/prices/subscribe/${encodeURIComponent(sym)}`, { method: 'POST' }); }
+      catch (e) { console.error(e); }
+    };
+    $('unsubBtn').onclick = async () => {
+      const sym = $('symbolInput').value.trim().toUpperCase();
+      if (!sym) return;
+      try { await fetch(`/prices/unsubscribe/${encodeURIComponent(sym)}`, { method: 'POST' }); }
+      catch (e) { console.error(e); }
+      latest.delete(sym);
+      updateLatest('', {});
+    };
+
+    $('reconnectBtn').onclick = async () => {
+      try {
+        const r = await fetch('/prices/reconnect', { method: 'POST' });
+        if (!r.ok) throw new Error(await r.text());
+        const b = $('wsStatusBadge'); b.textContent = 'Reconnecting…'; b.className = 'badge yellow';
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    refresh();
+    setInterval(refresh, 5000);
+    setInterval(updateWsStatus, 3000);
+    startEventsWS();
+    startHeartbeatWS();
+    startPricesWS();
+    updateWsStatus();
+  </script>
+</body>
+</html>
