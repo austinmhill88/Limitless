@@ -14,9 +14,8 @@ def ema(series: pd.Series, span: int) -> pd.Series:
 def compute_vwap(df: pd.DataFrame) -> pd.Series:
     tp = (df["high"] + df["low"] + df["close"]) / 3.0
     cum_vp = (tp * df["volume"]).cumsum()
-    cum_vol = df["volume"].cumsum()
     # Avoid division by zero by replacing 0 with NaN
-    cum_vol = cum_vol.replace(0, math.nan)
+    cum_vol = df["volume"].cumsum().replace(0, math.nan)
     return cum_vp / cum_vol
 
 def opening_range(df: pd.DataFrame, start_et: datetime) -> Tuple[float, float]:
@@ -48,8 +47,10 @@ def qualify_entry(df: pd.DataFrame, orh: float) -> Dict[str, Any]:
     # Close back above vwap on current bar
     close_back_above = last["close"] > last["vwap"]
     # Avoid division by zero when calculating extension
-    vwap_val = last["vwap"] if last["vwap"] != 0 else 1.0
+    # Using NaN instead of 1.0 to be consistent with other calculations
+    vwap_val = last["vwap"] if last["vwap"] != 0 else math.nan
     extension = (last["close"] - last["vwap"]) / vwap_val
+    # NaN will fail the <= comparison, which is the safe behavior (skip the entry)
     not_extended = extension <= settings.vwap_extension_max_pct
 
     return {

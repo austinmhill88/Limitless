@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import json
+import re
 from typing import Dict, Optional
 from contextlib import suppress
 
@@ -292,7 +293,8 @@ async def prices_sub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
-    if not sym.isalnum():
+    # Allow alphanumeric plus dots and hyphens for symbols like BRK.A
+    if not re.match(r'^[A-Z0-9.-]+$', sym):
         raise HTTPException(status_code=400, detail="invalid symbol format")
     _prices_symbols.add(sym)
     await _prices_send({"action": "subscribe", "bars": [sym], "quotes": [sym], "trades": [sym]})
@@ -304,7 +306,8 @@ async def prices_unsub(symbol: str):
     sym = symbol.upper().strip()
     if not sym:
         raise HTTPException(status_code=400, detail="symbol required")
-    if not sym.isalnum():
+    # Allow alphanumeric plus dots and hyphens for symbols like BRK.A
+    if not re.match(r'^[A-Z0-9.-]+$', sym):
         raise HTTPException(status_code=400, detail="invalid symbol format")
     with suppress(KeyError):
         _prices_symbols.remove(sym)

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from zoneinfo import ZoneInfo
 import asyncio
+import logging
 
 from bot.config.settings import settings
 from bot.broker.alpaca_adapter import (
@@ -17,6 +18,7 @@ from bot.strategy.rules import build_indicators, opening_range, qualify_entry, q
 from bot.logging.audit import Auditor
 from bot.logging.events import publish, format_skip, format_info, format_entry, format_close
 
+logger = logging.getLogger("limitless.engine")
 TZ_ET = ZoneInfo("America/New_York")
 
 def parse_time_et(hhmm: str, base_date: Optional[datetime] = None) -> datetime:
@@ -141,8 +143,8 @@ class Engine:
         if self._event_loop and self._event_loop.is_running():
             try:
                 asyncio.run_coroutine_threadsafe(publish(message), self._event_loop)
-            except Exception:
-                pass  # Silently fail if event loop is not available
+            except Exception as e:
+                logger.debug("Failed to publish event: %s", e)
 
     def refresh_mode(self):
         acct = get_account()

@@ -16,7 +16,7 @@ class EarningsCalendar:
     def refresh_symbol(self, symbol: str):
         # Finnhub endpoint: /calendar/earnings?symbol=TSLA
         # Note: You may need to handle rate limits; cache results daily
-        if not settings.finnhub_api_key:
+        if not settings.finnhub_api_key or not settings.finnhub_api_key.strip():
             logger.warning("Finnhub API key not configured, skipping earnings calendar refresh for %s", symbol)
             return
         
