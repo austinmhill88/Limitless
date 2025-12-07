@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Limitless Trading - Command Center</title>
-  <!-- Version: 2025-12-07 with subscription fixes -->
   <style>
     * {
       margin: 0;
@@ -1185,20 +1184,12 @@
         
         // Update subscribed symbols list
         if (status.subscribed && Array.isArray(status.subscribed)) {
-          console.log('Updating subscriptions from server:', status.subscribed);
-          let addedCount = 0;
           for (const symbol of status.subscribed) {
             if (!priceData.has(symbol)) {
               priceData.set(symbol, { last: null });
-              addedCount++;
             }
           }
-          if (addedCount > 0) {
-            console.log(`Added ${addedCount} symbols to priceData, total size:`, priceData.size);
-          }
           updatePriceTicker();
-        } else {
-          console.warn('No subscribed symbols returned from server');
         }
       } catch (e) {
         console.error('Failed to update WS status:', e);
@@ -1213,12 +1204,10 @@
 
     function updatePriceTicker() {
       const ticker = $('priceTicker');
-      console.log('updatePriceTicker: priceData.size =', priceData.size, ', symbols =', Array.from(priceData.keys()));
       ticker.innerHTML = '';
       
       if (priceData.size === 0) {
         ticker.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.9rem;">No subscriptions</div>';
-        console.log('updatePriceTicker: No subscriptions to display');
         return;
       }
       
@@ -1231,8 +1220,6 @@
         `;
         ticker.appendChild(item);
       }
-      
-      console.log('updatePriceTicker: Added', priceData.size, 'items to ticker');
     }
 
     $('subscribeBtn').onclick = async () => {
@@ -1240,28 +1227,20 @@
       if (!symbol) return;
       
       try {
-        console.log('Subscribing to:', symbol);
         const response = await fetch(`/prices/subscribe/${encodeURIComponent(symbol)}`, { method: 'POST' });
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(errorText || `HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        console.log('Subscribe successful, response:', data);
         
         // Add symbol to local priceData if not already there
-        const wasAlreadyPresent = priceData.has(symbol);
-        if (!wasAlreadyPresent) {
+        if (!priceData.has(symbol)) {
           priceData.set(symbol, { last: null });
-          console.log(`Added ${symbol} to priceData, new size:`, priceData.size);
-        } else {
-          console.log(`${symbol} was already in priceData`);
         }
         
         // Update ticker to show the new subscription
-        console.log('Calling updatePriceTicker()');
         updatePriceTicker();
-        console.log('updatePriceTicker() completed');
         
         addLogEntry(`📊 Subscribed to ${symbol}`);
         $('symbolInput').value = ''; // Clear input field
@@ -1410,8 +1389,7 @@
     }
 
     // Initialize
-    console.log('Limitless Command Center v2025-12-07 with subscription fixes');
-    addLogEntry('🚀 Limitless Command Center initialized (v2025-12-07)');
+    addLogEntry('🚀 Limitless Command Center initialized');
     addLogEntry('📡 Connecting to backend services...');
     
     refreshStatus();
