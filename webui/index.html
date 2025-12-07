@@ -1018,7 +1018,11 @@
           body: JSON.stringify(data)
         });
         
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+          const errorText = await r.text();
+          throw new Error(errorText || `HTTP ${r.status}`);
+        }
+        
         const result = await r.json();
         
         addLogEntry('✅ Settings updated successfully');
